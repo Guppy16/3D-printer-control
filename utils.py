@@ -41,7 +41,7 @@ def extract_nozzle_temp(ser: serial.Serial):
   if out != '' and ':' in out and 'S' not in out:
     colon = out.find('T:') + 1
     return float(out[colon+1:colon+6])
-  print("Error: No temperature found")
+  print("Error: No temperature found:\t", out)
   return 0.0
 
 def close_printer(ser: serial.Serial, cool=True):
@@ -83,7 +83,7 @@ def set_nozzle_temp(ser: serial.Serial, temp=25, avg_num=3, tol=0.5):
   if abs(avg_temp - temp) <= tol:
     print("Already at required temperature")
     return True
-    
+
   # Flag to turn on fan if cooling nozzle
   flag_cooling = avg_temp > temp
 
