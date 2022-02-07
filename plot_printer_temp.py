@@ -1,5 +1,4 @@
 import time
-from cv2 import repeat
 import serial
 import numpy as np
 import matplotlib.pyplot as plt
