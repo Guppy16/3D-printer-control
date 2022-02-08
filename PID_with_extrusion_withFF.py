@@ -83,7 +83,7 @@ def temp_target_update():
   """Generator to send target temperature"""
 
   dist_K = 3
-  dist_tau = 5
+  dist_tau = 2
   dist_T = 5
 
   global axis_start_time
