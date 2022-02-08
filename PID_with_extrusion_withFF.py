@@ -9,7 +9,7 @@ import utils
 
 
 com = "COM6"
-figname = f"./PID_tests/EXTRUDE_test_2_{time.time()}"
+figname = f"./PID_tests/EXTRUDE_FF_2_{time.time()}"
 
 # Connect to printer
 ser = utils.get_serial_connection(port=com, baudrate=38400)
@@ -49,13 +49,14 @@ ax.legend(bbox_to_anchor=(1.04,1), loc="upper left")
 
 nozzle_temp_data = np.array([])
 time_data = np.array([])
-# target_data = np.array([])
+temp_target_data = np.array([])
 extrude_data = np.array([])
 
 # Set extrusion type as absolute
 ser.write(f"M83\r\n".encode())
 
 extrude_phase = 0
+extrude_feedrate = 350
 def extrude_update():
   """Function to send targets"""
   global extrude_data, extrude_phase
@@ -73,24 +74,53 @@ def extrude_update():
     # Default phase: Extrude 0
     else:
       extrude_phase = 0 # Reset extrude phase
-      ser.write(f"G1 F350 E0\r\n".encode())
+      ser.write(f"G1 F{extrude_feedrate} E0\r\n".encode())
       yield 0
 extrude_update_gen = extrude_update()
+
+temp_target_update = 0 # Store update temperature
+def temp_target_update():
+  """Generator to send target temperature"""
+
+  dist_K = 3
+  dist_tau = 5
+  dist_T = 5
+
+  global axis_start_time
+  while True:
+    # Phase 0: No Extrusion
+
+    # Phase 1: Extrusion
+    if extrude_phase == 1:
+      start_idx = start_idx if start_idx else len(time_data) - 1
+      curr_idx = len(time_data) - 1
+      t = (curr_idx - start_idx) * timestep
+      temp_update = dist_K * extrude_data[int(curr_idx - dist_tau / timestep)] * np.exp(- t / dist_T ) / extrude_feedrate
+      print(temp_update)
+    # Other phase
+    else:
+      temp_update = 0
+      start_idx = 0
+      
+    ser.write(f"M104 S{temp_update + temp_target}\r\n".encode())
+    yield temp_update + temp_target
+temp_target_update_gen = temp_target_update()
 
 rescale_flag = False
 axis_start_time = 0
 def update(i):
-  global nozzle_temp_data, time_data, extrude_data, axis_start_time
+  global nozzle_temp_data, time_data, extrude_data, axis_start_time, temp_target_data
 
   # Read temperature measurement
   # NOTE: This measurement lags behind by 0.5s (i.e. update interval)
   nozzle_temp_data = np.append(nozzle_temp_data, [utils.extract_nozzle_temp(ser)])
   time_data = np.append(time_data, [len(time_data) * timestep])
   extrude_data = np.append(extrude_data, [next(extrude_update_gen)])
+  temp_target_data = np.append(temp_target_data, [next(temp_target_update_gen)])
 
   # Replot line
   line.set_data(time_data, nozzle_temp_data)
-  target_line.set_data(time_data, [temp_target for _ in time_data])
+  target_line.set_data(time_data, temp_target_data)
   extrude_line.set_data(time_data, extrude_data)
 
   # Plot moving average
@@ -100,7 +130,7 @@ def update(i):
 
   # Rescale axis to show close up view of data
   if rescale_flag:
-    axis_start_time = time_data[-1] if axis_start_time == 0 else axis_start_time
+    # axis_start_time = time_data[-1] if axis_start_time == 0 else axis_start_time
     ax.set_xlim(axis_start_time, time_data[-1])
     ax.set_ylim(temp_target - 5, temp_target + 5)
   else:
@@ -108,7 +138,6 @@ def update(i):
 
   ax.relim()
   ax.autoscale_view()
-
 
   # Send command to printer to measure temperature
   ser.write(b'M105\r\n')
@@ -126,7 +155,7 @@ ser.write(b'M105\r\n')
 ani = animation.FuncAnimation(fig, update, interval=int(timestep*1000), frames=int(max_timesteps/timestep), repeat=False)
 
 def save_fig(event):
-  global extrude_phase, rescale_flag
+  global extrude_phase, rescale_flag, axis_start_time
   if event.key == 's':
     ani.event_source.stop()
     # fig.savefig('test.png')
@@ -136,6 +165,7 @@ def save_fig(event):
     np.save(f"{figname}_temp", nozzle_temp_data)
     np.save(f"{figname}_times", time_data)
     np.save(f"{figname}_extrude", extrude_data)
+    np.save(f"{figname}_temp_target", temp_target_data)
 
     utils.close_printer(ser)
   
@@ -145,6 +175,7 @@ def save_fig(event):
 
   if event.key == 'r':
     rescale_flag = not rescale_flag
+    axis_start_time = time_data[-1] if rescale_flag else 0
     print(f"Rescaling axis")
 
 cid = fig.canvas.mpl_connect('key_press_event', save_fig)
