@@ -9,7 +9,7 @@ import utils
 
 
 com = "COM6"
-figname = f"./PID_tests/EXTRUDE_FF_2_{time.time()}"
+figname = f"./PID_tests/EXTRUDE_FF_k0_{time.time()}"
 
 # Connect to printer
 ser = utils.get_serial_connection(port=com, baudrate=38400)
@@ -82,9 +82,9 @@ temp_target_update = 0 # Store update temperature
 def temp_target_update():
   """Generator to send target temperature"""
 
-  dist_K = 3
+  dist_K = 0
   dist_tau = 2
-  dist_T = 5
+  dist_T = 50
 
   global axis_start_time
   while True:
